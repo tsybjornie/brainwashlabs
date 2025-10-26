@@ -1,12 +1,9 @@
-# main.py — Brainwash Labs Backend (v2.4.0 Render-Proof Edition)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
-import logging
-import httpx
-import asyncio
+import os, logging, asyncio, httpx
+from importlib import import_module
+from pathlib import Path
 
 # ───────────────────────────────────────────────
 # 🧩 Environment Boot
@@ -21,16 +18,16 @@ logging.basicConfig(
 logger = logging.getLogger("brainwashlabs")
 
 # ───────────────────────────────────────────────
-# 🚀 FastAPI App Setup
+# 🚀 FastAPI App
 # ───────────────────────────────────────────────
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.4.0"
+    version="2.4.1"
 )
 
 # ───────────────────────────────────────────────
-# 🌐 CORS Configuration
+# 🌐 CORS
 # ───────────────────────────────────────────────
 default_origins = [
     "http://localhost:5173",
@@ -38,7 +35,6 @@ default_origins = [
     "https://brainwashlabs.onrender.com",
     "https://brainwashlabs.com",
 ]
-
 extra_origins = os.getenv("CORS_EXTRA_ORIGINS", "")
 if extra_origins:
     default_origins.extend(extra_origins.split(","))
@@ -52,52 +48,22 @@ app.add_middleware(
 )
 
 # ───────────────────────────────────────────────
-# 🧠 ROUTER REGISTRATION (Render-Proof Method)
-# ───────────────────────────────────────────────
-# Render sometimes skips dynamic imports, so we hard-register all routers.
-try:
-    from routes import (
-        auth,
-        avatar,
-        analytics,
-        dashboard,
-        finance,
-        integrations,
-        webhooks,
-    )
-
-    app.include_router(auth.router)
-    app.include_router(avatar.router)
-    app.include_router(analytics.router)
-    app.include_router(dashboard.router)
-    app.include_router(finance.router)
-    app.include_router(integrations.router)
-    app.include_router(webhooks.router)
-
-    logger.info("✅ All routers manually registered successfully.")
-except Exception as e:
-    logger.error(f"❌ Router import failed: {e}")
-
-# ───────────────────────────────────────────────
-# 💡 Root & Health Endpoints
+# 💡 Base Routes
 # ───────────────────────────────────────────────
 @app.get("/")
 async def root():
-    """Main landing endpoint"""
     return {
         "status": "✅ Brainwash Labs Backend is running!",
-        "environment": os.getenv("ENV", "production"),
-        "version": "2.4.0",
-        "origin": os.getenv("RENDER_EXTERNAL_URL", "local"),
+        "env": os.getenv("ENV", "production"),
+        "version": "2.4.1"
     }
 
 @app.get("/healthz")
 async def health_check():
-    """Render health check endpoint"""
     return {"ok": True, "uptime": "stable", "env": os.getenv("ENV", "production")}
 
 # ───────────────────────────────────────────────
-# ⚙️ Async Service Health Checks (Stripe / Coinbase / OpenAI)
+# 🧠 Service Health Checks
 # ───────────────────────────────────────────────
 async def verify_service_health():
     services = {
@@ -105,52 +71,61 @@ async def verify_service_health():
         "Coinbase": os.getenv("COINBASE_API_KEY"),
         "OpenAI": os.getenv("OPENAI_API_KEY"),
     }
-
     async with httpx.AsyncClient(timeout=6.0) as client:
         for name, key in services.items():
             if not key:
                 logger.warning(f"⚠️ Missing {name} API key in environment")
                 continue
-
             try:
-                if name == "Stripe":
-                    await client.get(
-                        "https://api.stripe.com/v1/charges",
-                        headers={"Authorization": f"Bearer {key}"},
-                    )
-                elif name == "Coinbase":
-                    await client.get(
-                        "https://api.commerce.coinbase.com/checkouts",
-                        headers={"X-CC-Api-Key": key},
-                    )
-                elif name == "OpenAI":
-                    await client.get(
-                        "https://api.openai.com/v1/models",
-                        headers={"Authorization": f"Bearer {key}"},
-                    )
+                urls = {
+                    "Stripe": "https://api.stripe.com/v1/charges",
+                    "Coinbase": "https://api.commerce.coinbase.com/checkouts",
+                    "OpenAI": "https://api.openai.com/v1/models"
+                }
+                await client.get(urls[name], headers={
+                    "Authorization": f"Bearer {key}" if name != "Coinbase" else "",
+                    "X-CC-Api-Key": key if name == "Coinbase" else ""
+                })
                 logger.info(f"✅ {name} API reachable")
             except Exception as e:
                 logger.warning(f"⚠️ {name} connectivity check failed: {e}")
 
 # ───────────────────────────────────────────────
-# 🧠 Startup Events
+# 🧩 Force Import + Router Registration
 # ───────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (Render v2.4.0)")
-    asyncio.create_task(verify_service_health())
-    logger.info("🧩 Backend initialized and ready for requests.")
+try:
+    import routes
+    from routes import (
+        auth, avatar, analytics, dashboard, finance, integrations, webhooks
+    )
+
+    app.include_router(auth.router, prefix="/auth")
+    app.include_router(avatar.router, prefix="/avatar")
+    app.include_router(analytics.router, prefix="/analytics")
+    app.include_router(dashboard.router, prefix="/dashboard")
+    app.include_router(finance.router, prefix="/finance")
+    app.include_router(integrations.router, prefix="/integrations")
+    app.include_router(webhooks.router, prefix="/webhooks")
+
+    logger.info("✅ All routers registered successfully (hard-load mode).")
+except Exception as e:
+    logger.error(f"❌ Router registration failed: {e}")
 
 # ───────────────────────────────────────────────
-# 🧩 Debug Endpoints
+# 🧩 Debug
 # ───────────────────────────────────────────────
 @app.get("/debug/routes")
 async def debug_routes():
-    """List all registered routes for Render diagnostics"""
-    try:
-        return {
-            "routes": [r.path for r in app.routes if hasattr(r, "path")],
-            "version": "2.4.0",
-        }
-    except Exception as e:
-        return {"error": str(e)}
+    return {
+        "routes": [r.path for r in app.routes if hasattr(r, "path")],
+        "version": "2.4.1"
+    }
+
+# ───────────────────────────────────────────────
+# 🧠 Startup
+# ───────────────────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.1)")
+    asyncio.create_task(verify_service_health())
+    logger.info("🧩 Backend initialized and ready for requests.")
