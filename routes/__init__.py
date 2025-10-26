@@ -1,37 +1,38 @@
+# routes/__init__.py
 """
-🧩 Router Package Initializer — Brainwash Labs Backend v2.4.0
-Ensures all route modules inside /routes are force-loaded at startup.
-This prevents Render from skipping lazy imports and guarantees
-each router (auth, finance, integrations, etc.) is registered properly.
+✅ Brainwash Labs Route Registry — Render-Proof Loader (v2.4.2)
+Ensures all routers inside /routes are imported during startup.
 """
 
-# Import all route modules
-from . import (
-    auth,
-    avatar,
-    analytics,
-    dashboard,
-    finance,
-    integrations,
-    webhooks
-)
+import importlib
+import logging
 
-# Expose routers explicitly (for debugging or manual registration)
-__all__ = [
+logger = logging.getLogger("routes")
+
+ROUTE_MODULES = [
     "auth",
     "avatar",
     "analytics",
     "dashboard",
     "finance",
     "integrations",
-    "webhooks",
+    "webhooks"
 ]
 
-# Optional: helper for diagnostics
-def list_routes():
-    """Return all routers successfully imported"""
-    return [m for m in __all__ if m in globals()]
+loaded = []
 
-# Log confirmation on import (useful for Render boot logs)
-if __name__ == "__main__" or True:
-    print(f"✅ routes/__init__.py loaded. Modules: {', '.join(list_routes())}")
+for module_name in ROUTE_MODULES:
+    try:
+        imported = importlib.import_module(f"routes.{module_name}")
+        if hasattr(imported, "router"):
+            loaded.append(module_name)
+            logger.info(f"✅ Router imported: {module_name}")
+        else:
+            logger.warning(f"⚠️ No router found in {module_name}.py")
+    except Exception as e:
+        logger.error(f"❌ Failed to import {module_name}: {e}")
+
+if not loaded:
+    logger.warning("⚠️ No routers successfully loaded. Check Render folder mapping.")
+
+__all__ = loaded
