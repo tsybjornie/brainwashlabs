@@ -26,7 +26,7 @@ logger = logging.getLogger("brainwashlabs")
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.2.0"
+    version="2.3.0"
 )
 
 # ───────────────────────────────────────────────
@@ -52,7 +52,7 @@ app.add_middleware(
 )
 
 # ───────────────────────────────────────────────
-# 🧩 Dynamic Router Loader (with diagnostics)
+# 🧩 Dynamic Router Loader (Auto-Prefix Enabled)
 # ───────────────────────────────────────────────
 routes_path = Path(__file__).parent / "routes"
 
@@ -65,8 +65,9 @@ if routes_path.exists():
         try:
             module = import_module(f"routes.{file.stem}")
             if hasattr(module, "router"):
-                app.include_router(module.router)
-                logger.info(f"✅ Loaded router: {file.stem}")
+                prefix = f"/{file.stem}" if file.stem != "main" else ""
+                app.include_router(module.router, prefix=prefix)
+                logger.info(f"✅ Loaded router with prefix: {prefix}")
                 loaded_count += 1
             else:
                 logger.warning(f"⚠️ {file.stem}.py does not define `router`")
@@ -85,7 +86,7 @@ async def root():
     return {
         "status": "✅ Brainwash Labs Backend is running!",
         "environment": os.getenv("ENV", "production"),
-        "version": "2.2.0",
+        "version": "2.3.0",
         "origin": os.getenv("RENDER_EXTERNAL_URL", "local"),
     }
 
@@ -135,7 +136,7 @@ async def verify_service_health():
 # ───────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (Render v2.2)")
+    logger.info("🚀 Booting Brainwash Labs Backend (Render v2.3)")
 
     # 1. Check environment variables
     missing_envs = [
@@ -167,5 +168,5 @@ async def debug_env():
         "service": "Brainwash Labs Backend",
         "env_keys": safe_envs,
         "routes_loaded": safe_routes,
-        "version": "2.2.0"
+        "version": "2.3.0"
     }
