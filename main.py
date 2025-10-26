@@ -1,14 +1,15 @@
-import sys, os, logging, asyncio, httpx
+import sys, os, logging, asyncio, httpx, traceback
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # ───────────────────────────────────────────────
-# 🧩 Environment Boot + Path Fix (Render-safe)
+# 🧩 Environment Boot + Render Path Safety
 # ───────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
+
 print("📦 Python path:", sys.path)
 print("📁 Routes folder exists:", os.path.exists(os.path.join(BASE_DIR, "routes")))
 print("📁 Routes init found:", os.path.exists(os.path.join(BASE_DIR, "routes", "__init__.py")))
@@ -23,16 +24,16 @@ logging.basicConfig(
 logger = logging.getLogger("brainwashlabs")
 
 # ───────────────────────────────────────────────
-# 🚀 FastAPI App
+# 🚀 FastAPI App Setup
 # ───────────────────────────────────────────────
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.4.2"
+    version="2.4.5"
 )
 
 # ───────────────────────────────────────────────
-# 🌐 CORS
+# 🌐 CORS Setup
 # ───────────────────────────────────────────────
 default_origins = [
     "http://localhost:5173",
@@ -40,6 +41,7 @@ default_origins = [
     "https://brainwashlabs.onrender.com",
     "https://brainwashlabs.com",
 ]
+
 extra_origins = os.getenv("CORS_EXTRA_ORIGINS", "")
 if extra_origins:
     default_origins.extend(extra_origins.split(","))
@@ -53,14 +55,14 @@ app.add_middleware(
 )
 
 # ───────────────────────────────────────────────
-# 💡 Base Routes
+# 💡 Root + Health Endpoints
 # ───────────────────────────────────────────────
 @app.get("/")
 async def root():
     return {
         "status": "✅ Brainwash Labs Backend is running!",
         "env": os.getenv("ENV", "production"),
-        "version": "2.4.2"
+        "version": "2.4.5",
     }
 
 @app.get("/healthz")
@@ -68,7 +70,7 @@ async def health_check():
     return {"ok": True, "uptime": "stable", "env": os.getenv("ENV", "production")}
 
 # ───────────────────────────────────────────────
-# 🧠 External Service Health
+# ⚙️ Third-Party Service Health (Async)
 # ───────────────────────────────────────────────
 async def verify_service_health():
     services = {
@@ -85,61 +87,62 @@ async def verify_service_health():
                 urls = {
                     "Stripe": "https://api.stripe.com/v1/charges",
                     "Coinbase": "https://api.commerce.coinbase.com/checkouts",
-                    "OpenAI": "https://api.openai.com/v1/models"
+                    "OpenAI": "https://api.openai.com/v1/models",
                 }
-                await client.get(urls[name], headers={
+                headers = {
                     "Authorization": f"Bearer {key}" if name != "Coinbase" else "",
-                    "X-CC-Api-Key": key if name == "Coinbase" else ""
-                })
+                    "X-CC-Api-Key": key if name == "Coinbase" else "",
+                }
+                await client.get(urls[name], headers=headers)
                 logger.info(f"✅ {name} API reachable")
             except Exception as e:
                 logger.warning(f"⚠️ {name} connectivity check failed: {e}")
 
 # ───────────────────────────────────────────────
-# 🧩 Router Hard Registration (Render-safe)
+# 🧩 Router Registration (Force-Load & Diagnose)
 # ───────────────────────────────────────────────
 try:
     import routes
-    from routes import (
-        auth, avatar, analytics, dashboard, finance, integrations, webhooks
-    )
+    from routes import auth, avatar, analytics, dashboard, finance, integrations, webhooks
 
-    routers = [
-        (auth.router, "/auth"),
-        (avatar.router, "/avatar"),
-        (analytics.router, "/analytics"),
-        (dashboard.router, "/dashboard"),
-        (finance.router, "/finance"),
-        (integrations.router, "/integrations"),
-        (webhooks.router, "/webhooks")
-    ]
+    routers = {
+        "/auth": auth,
+        "/avatar": avatar,
+        "/analytics": analytics,
+        "/dashboard": dashboard,
+        "/finance": finance,
+        "/integrations": integrations,
+        "/webhooks": webhooks,
+    }
 
-    for router, prefix in routers:
-        app.include_router(router, prefix=prefix)
-        logger.info(f"✅ Registered router: {prefix}")
+    for prefix, module in routers.items():
+        if hasattr(module, "router"):
+            app.include_router(module.router, prefix=prefix)
+            logger.info(f"✅ Registered router: {prefix}")
+        else:
+            logger.warning(f"⚠️ Skipped {prefix}: no `router` found")
 
-    logger.info("✅ All routers registered successfully (Render-safe mode).")
+    logger.info("🚀 All routers registered successfully (v2.4.5)")
 
 except Exception as e:
     logger.error(f"❌ Router registration failed: {e}")
-    import traceback
     traceback.print_exc()
 
 # ───────────────────────────────────────────────
-# 🧩 Debug Endpoint
+# 🧩 Debug Endpoint — Route Map
 # ───────────────────────────────────────────────
 @app.get("/debug/routes")
 async def debug_routes():
     return {
         "routes": [r.path for r in app.routes if hasattr(r, "path")],
-        "version": "2.4.2"
+        "version": "2.4.5",
     }
 
 # ───────────────────────────────────────────────
-# 🚀 Startup
+# 🚀 Startup Hook
 # ───────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.2)")
+    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.5)")
     asyncio.create_task(verify_service_health())
     logger.info("🧩 Backend initialized and ready for requests.")
