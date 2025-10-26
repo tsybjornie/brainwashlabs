@@ -29,7 +29,7 @@ logger = logging.getLogger("brainwashlabs")
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.4.6"
+    version="2.4.7"
 )
 
 # ───────────────────────────────────────────────
@@ -62,7 +62,7 @@ async def root():
     return {
         "status": "✅ Brainwash Labs Backend is running!",
         "env": os.getenv("ENV", "production"),
-        "version": "2.4.6",
+        "version": "2.4.7",
     }
 
 @app.get("/healthz")
@@ -105,15 +105,40 @@ async def verify_service_health():
 async def debug_routes():
     return {
         "routes": [r.path for r in app.routes if hasattr(r, "path")],
-        "version": "2.4.6",
+        "version": "2.4.7",
     }
+
+# ───────────────────────────────────────────────
+# 🧩 Router Trace Diagnostic
+# ───────────────────────────────────────────────
+def trace_router_imports():
+    router_modules = [
+        "routes.auth",
+        "routes.avatar",
+        "routes.analytics",
+        "routes.dashboard",
+        "routes.finance",
+        "routes.integrations",
+        "routes.webhooks",
+    ]
+    for module_name in router_modules:
+        try:
+            mod = __import__(module_name, fromlist=["router"])
+            has_router = hasattr(mod, "router")
+            logger.info(f"🔍 {module_name} import ok — router={has_router}")
+        except Exception as e:
+            logger.error(f"❌ Failed to import {module_name}: {e}")
 
 # ───────────────────────────────────────────────
 # 🚀 Startup Hook (Dynamic Router Import)
 # ───────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.6)")
+    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.7)")
+
+    # Run diagnostic first
+    trace_router_imports()
+
     asyncio.create_task(verify_service_health())
 
     try:
