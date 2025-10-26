@@ -26,7 +26,7 @@ logger = logging.getLogger("brainwashlabs")
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.3.0"
+    version="2.3.2"
 )
 
 # ───────────────────────────────────────────────
@@ -52,13 +52,13 @@ app.add_middleware(
 )
 
 # ───────────────────────────────────────────────
-# 🧩 Dynamic Router Loader (Auto-Prefix Enabled)
+# 🧠 Dynamic Router Loader (Auto + Fallback)
 # ───────────────────────────────────────────────
 routes_path = Path(__file__).parent / "routes"
+loaded_routes = []
 
 if routes_path.exists():
     logger.info(f"📁 Scanning for routers in: {routes_path.resolve()}")
-    loaded_count = 0
     for file in routes_path.glob("*.py"):
         if file.stem.startswith("_"):
             continue
@@ -67,16 +67,22 @@ if routes_path.exists():
             if hasattr(module, "router"):
                 prefix = f"/{file.stem}" if file.stem != "main" else ""
                 app.include_router(module.router, prefix=prefix)
-                logger.info(f"✅ Loaded router with prefix: {prefix}")
-                loaded_count += 1
+                loaded_routes.append(f"{prefix or '/'}")
+                logger.info(f"✅ Loaded router: {file.stem} (prefix '{prefix}')")
             else:
-                logger.warning(f"⚠️ {file.stem}.py does not define `router`")
+                logger.warning(f"⚠️ Skipped {file.stem}: no `router` found")
         except Exception as e:
             logger.error(f"❌ Failed to load router {file.stem}: {e}")
-    if loaded_count == 0:
-        logger.warning("⚠️ No routers were successfully loaded from /routes")
 else:
     logger.error("❌ Routes directory not found. Verify deployment path structure.")
+
+if not loaded_routes:
+    logger.warning("⚠️ No routers successfully loaded — fallback import triggered.")
+    try:
+        import routes  # triggers registry import from __init__.py
+        logger.info("✅ Fallback import from routes.__init__ successful.")
+    except Exception as e:
+        logger.error(f"❌ Fallback import failed: {e}")
 
 # ───────────────────────────────────────────────
 # 💡 Root & Health Endpoints
@@ -86,17 +92,16 @@ async def root():
     return {
         "status": "✅ Brainwash Labs Backend is running!",
         "environment": os.getenv("ENV", "production"),
-        "version": "2.3.0",
+        "version": "2.3.2",
         "origin": os.getenv("RENDER_EXTERNAL_URL", "local"),
     }
 
 @app.get("/healthz")
 async def health_check():
-    """Simple Render/Load Balancer probe"""
     return {"ok": True, "uptime": "stable", "env": os.getenv("ENV", "production")}
 
 # ───────────────────────────────────────────────
-# ⚙️ Async Service Health Checks (Stripe, Coinbase, OpenAI)
+# ⚙️ Async Service Health Checks
 # ───────────────────────────────────────────────
 async def verify_service_health():
     services = {
@@ -136,37 +141,18 @@ async def verify_service_health():
 # ───────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (Render v2.3)")
-
-    # 1. Check environment variables
-    missing_envs = [
-        k for k in ["STRIPE_SECRET_KEY", "COINBASE_API_KEY", "OPENAI_API_KEY"]
-        if not os.getenv(k)
-    ]
-    if missing_envs:
-        logger.warning(f"⚠️ Missing ENV variables: {', '.join(missing_envs)}")
-    else:
-        logger.info("✅ All critical ENV variables found")
-
-    # 2. Verify third-party services concurrently
+    logger.info("🚀 Booting Brainwash Labs Backend (Render v2.3.2)")
     asyncio.create_task(verify_service_health())
-
-    logger.info("🧩 Backend initialized successfully and ready for requests.")
+    logger.info("🧩 Backend initialized and ready for requests.")
 
 # ───────────────────────────────────────────────
-# 🧩 Debug Endpoint (safe inspection)
+# 🧩 Debug Endpoints
 # ───────────────────────────────────────────────
-@app.get("/debug/env")
-async def debug_env():
-    """Safe environment view for Render AI debug"""
-    safe_routes = [r.path for r in app.routes if hasattr(r, "path")]
-    safe_envs = [
-        k for k in os.environ.keys()
-        if not any(x in k.lower() for x in ["key", "secret", "token"])
-    ]
+@app.get("/debug/routes")
+async def debug_routes():
+    """List all registered routes (for Render diagnostics)"""
     return {
-        "service": "Brainwash Labs Backend",
-        "env_keys": safe_envs,
-        "routes_loaded": safe_routes,
-        "version": "2.3.0"
+        "routes": [r.path for r in app.routes if hasattr(r, "path")],
+        "loaded": loaded_routes,
+        "version": "2.3.2"
     }
