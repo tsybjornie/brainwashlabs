@@ -1,11 +1,12 @@
 # routes/__init__.py
 """
-✅ Brainwash Labs Route Registry — Render-Proof Loader (v2.4.2)
-Ensures all routers inside /routes are imported during startup.
+✅ Brainwash Labs — Route Registry (v2.4.3)
+Forces import of all routers in /routes during startup, even on Render.
 """
 
 import importlib
 import logging
+import os
 
 logger = logging.getLogger("routes")
 
@@ -16,23 +17,31 @@ ROUTE_MODULES = [
     "dashboard",
     "finance",
     "integrations",
-    "webhooks"
+    "webhooks",
 ]
 
 loaded = []
 
+# Verify routes directory existence
+routes_dir = os.path.dirname(__file__)
+logger.info(f"📁 Verifying routes in: {routes_dir}")
+
 for module_name in ROUTE_MODULES:
     try:
-        imported = importlib.import_module(f"routes.{module_name}")
-        if hasattr(imported, "router"):
+        module = importlib.import_module(f"routes.{module_name}")
+        if hasattr(module, "router"):
             loaded.append(module_name)
             logger.info(f"✅ Router imported: {module_name}")
         else:
-            logger.warning(f"⚠️ No router found in {module_name}.py")
+            logger.warning(f"⚠️ No 'router' found in {module_name}.py")
+    except ModuleNotFoundError:
+        logger.warning(f"⚠️ Missing file: routes/{module_name}.py")
     except Exception as e:
-        logger.error(f"❌ Failed to import {module_name}: {e}")
+        logger.error(f"❌ Error importing {module_name}: {e}")
 
-if not loaded:
-    logger.warning("⚠️ No routers successfully loaded. Check Render folder mapping.")
+if loaded:
+    logger.info(f"✅ Routers loaded successfully: {', '.join(loaded)}")
+else:
+    logger.error("❌ No routers loaded — please check router files.")
 
 __all__ = loaded
