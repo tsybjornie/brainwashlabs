@@ -1,77 +1,58 @@
 # ───────────────────────────────────────────────
-# 📊 Dashboard Router — Brainwash Labs v2.6.2
-# Integrates Finance + Webhook analytics
+# routes/dashboard.py — v2.7.0
+# Finance + ROI Dashboard Router
 # ───────────────────────────────────────────────
-
 from fastapi import APIRouter
-import json, os
 from pathlib import Path
-from datetime import datetime
+import json, os
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter()
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+FINANCE_LOG = DATA_DIR / "finance_log.json"
+REINVEST_LOG = DATA_DIR / "reinvest.json"
 
-DATA_PATH = Path("data/finance_log.json")
-
-# ───────────────────────────────────────────────
-# 📁 Helpers for loading finance data
-# ───────────────────────────────────────────────
-def load_finance_data():
-    if not DATA_PATH.exists():
-        return {
-            "transactions": [],
-            "total_revenue_usd": 0,
-            "stripe_payments": 0,
-            "coinbase_payments": 0,
-        }
-
+def read_json(file_path):
+    if not file_path.exists():
+        return []
     try:
-        with open(DATA_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                return data
-    except Exception as e:
-        print(f"⚠️ Failed to load finance data: {e}")
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except:
+        return []
 
-    return {
-        "transactions": [],
-        "total_revenue_usd": 0,
-        "stripe_payments": 0,
-        "coinbase_payments": 0,
-    }
-
-# ───────────────────────────────────────────────
-# 📈 Dashboard Metrics Endpoint
-# ───────────────────────────────────────────────
-@router.get("/metrics")
-async def dashboard_metrics():
-    """Return live dashboard analytics."""
-    data = load_finance_data()
-
-    total_tx = len(data.get("transactions", []))
-    total_revenue = data.get("total_revenue_usd", 0)
-    stripe_count = data.get("stripe_payments", 0)
-    coinbase_count = data.get("coinbase_payments", 0)
-
-    return {
-        "dashboard": "✅ active",
-        "total_transactions": total_tx,
-        "total_revenue_usd": total_revenue,
-        "stripe_payments": stripe_count,
-        "coinbase_payments": coinbase_count,
-        "env": os.getenv("ENV", "production"),
-        "version": "v2.6.2",
-        "last_updated": datetime.utcnow().isoformat() + "Z"
-    }
-
-# ───────────────────────────────────────────────
-# 🩵 Dashboard Health Endpoint
-# ───────────────────────────────────────────────
 @router.get("/status")
 async def dashboard_status():
-    """Simple health check for dashboard router."""
     return {
-        "dashboard": "✅ ready",
-        "env": os.getenv("ENV", "production"),
-        "version": "v2.6.2",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "ok": True,
+        "finance_connected": FINANCE_LOG.exists(),
+        "environment": os.getenv("ENV", "production"),
+        "version": "v2.7.0"
+    }
+
+@router.get("/metrics")
+async def dashboard_metrics():
+    logs = read_json(FINANCE_LOG)
+    total_revenue = 0
+    stripe_rev = 0
+    coinbase_rev = 0
+
+    if isinstance(logs, list):
+        for tx in logs:
+            amt = float(tx.get("amount", 0))
+            total_revenue += amt
+            src = tx.get("source", "").lower()
+            if "stripe" in src:
+                stripe_rev += amt
+            elif "coinbase" in src:
+                coinbase_rev += amt
+
+    roi_data = read_json(REINVEST_LOG)
+    roi = roi_data.get("roi", 0) if isinstance(roi_data, dict) else 0
+
+    return {
+        "total_revenue": round(total_revenue, 2),
+        "stripe_revenue": round(stripe_rev, 2),
+        "coinbase_revenue": round(coinbase_rev, 2),
+        "roi": round(roi, 2),
+        "version": "v2.7.0"
     }
