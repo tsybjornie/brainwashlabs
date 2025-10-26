@@ -1,105 +1,90 @@
 # ───────────────────────────────────────────────
-# 📊 Dashboard Router — Brainwash Labs
-# Unified service monitor for Finance + Webhooks
+# 📊 Dashboard Router — Brainwash Labs (v2.6.0)
+# Aggregates data from Finance + Webhooks + Local Logs
+# Render-safe and analytics-ready
 # ───────────────────────────────────────────────
 
-from fastapi import APIRouter
-import os
-import datetime
-import stripe
-import requests
+from fastapi import APIRouter, HTTPException
+import json, os
+from pathlib import Path
+from datetime import datetime
 
-router = APIRouter(
-    prefix="/dashboard",
-    tags=["dashboard"]
-)
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-# ───────────────────────────────────────────────
-# ✅ Status check (core heartbeat)
-# ───────────────────────────────────────────────
-@router.get("/status")
-async def dashboard_status():
-    """Return overall system heartbeat."""
-    return {
-        "dashboard": "✅ router active",
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-        "environment": os.getenv("ENV", "production")
-    }
+FINANCE_LOG = Path("data/finance_log.json")
+WEBHOOK_LOG = Path("data/webhook_log.json")
 
 # ───────────────────────────────────────────────
-# 💰 Finance readiness probe
+# 🧩 Helpers
 # ───────────────────────────────────────────────
-@router.get("/finance")
-async def dashboard_finance_status():
-    """Check Stripe + Coinbase connectivity."""
-    stripe_key = os.getenv("STRIPE_SECRET_KEY")
-    coinbase_key = os.getenv("COINBASE_API_KEY")
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-
-    status = {
-        "stripe_connected": bool(stripe_key),
-        "coinbase_connected": bool(coinbase_key),
-        "webhook_secret_loaded": bool(webhook_secret),
-    }
-
-    # Try a light Stripe API ping if configured
-    if stripe_key:
-        try:
-            stripe.api_key = stripe_key
-            # lightweight call (won’t charge)
-            balance = stripe.Balance.retrieve()
-            status["stripe_api_ok"] = True
-            status["available_balance"] = sum([b.amount for b in balance.available]) / 100
-        except Exception as e:
-            status["stripe_api_ok"] = False
-            status["error"] = str(e)
-
-    return status
-
-# ───────────────────────────────────────────────
-# 🔔 Webhook heartbeat aggregation
-# ───────────────────────────────────────────────
-@router.get("/webhooks")
-async def dashboard_webhooks_status():
-    """Ping local webhook endpoints to verify import."""
-    base_url = os.getenv("DASHBOARD_BASE_URL", "https://brainwashlabs.onrender.com")
-    urls = {
-        "stripe": f"{base_url}/api/webhooks/status",
-    }
-    results = {}
+def safe_load(path: Path):
     try:
-        r = requests.get(urls["stripe"], timeout=5)
-        results["webhooks_status"] = r.json()
-    except Exception as e:
-        results["webhooks_status"] = {"error": str(e)}
-    return results
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def safe_save(path: Path, data: list):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 # ───────────────────────────────────────────────
-# 📈 Summary metrics (placeholder for UI)
+# 💰 Finance Sync (triggered by webhook)
+# ───────────────────────────────────────────────
+def sync_from_webhooks():
+    """Merge Stripe + Coinbase events into finance_log.json"""
+    logs = safe_load(WEBHOOK_LOG)
+    finance = safe_load(FINANCE_LOG)
+
+    existing_ids = {x.get("id") for x in finance}
+    for event in logs:
+        payload = event.get("payload", {})
+        pid = payload.get("id") or payload.get("code")
+        if not pid or pid in existing_ids:
+            continue
+        finance.append({
+            "id": pid,
+            "source": event.get("source"),
+            "amount": payload.get("amount", {}).get("amount")
+                      if "amount" in payload else None,
+            "currency": payload.get("amount", {}).get("currency", "USD")
+                      if "amount" in payload else "USD",
+            "email": payload.get("metadata", {}).get("email")
+                      if "metadata" in payload else None,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    safe_save(FINANCE_LOG, finance)
+    return finance
+
+# ───────────────────────────────────────────────
+# 📈 Dashboard Metrics Endpoint
 # ───────────────────────────────────────────────
 @router.get("/metrics")
 async def dashboard_metrics():
-    """Aggregate core service states for frontend."""
+    """Aggregate payment data for dashboard display."""
+    finance_data = sync_from_webhooks()
+    total_tx = len(finance_data)
+    total_revenue = sum(float(x.get("amount", 0) or 0) for x in finance_data)
+    stripe_tx = [x for x in finance_data if x.get("source") == "stripe"]
+    coinbase_tx = [x for x in finance_data if x.get("source") == "coinbase"]
+
     return {
-        "uptime": "99.9%",
-        "version": "v2.4.8",
-        "services": {
-            "auth": True,
-            "finance": True,
-            "webhooks": True,
-        },
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        "dashboard": "✅ active",
+        "total_transactions": total_tx,
+        "total_revenue_usd": round(total_revenue, 2),
+        "stripe_payments": len(stripe_tx),
+        "coinbase_payments": len(coinbase_tx),
+        "version": "v2.6.0",
+        "env": os.getenv("ENV", "production")
     }
 
 # ───────────────────────────────────────────────
-# 🧠 Diagnostic route
+# 🔍 Dashboard Health
 # ───────────────────────────────────────────────
-@router.get("/debug")
-async def dashboard_debug():
-    """Return diagnostic environment info (safe subset)."""
-    return {
-        "routes_loaded": True,
-        "module": "dashboard.py",
-        "env_loaded": bool(os.getenv("STRIPE_SECRET_KEY") or os.getenv("COINBASE_API_KEY")),
-        "notes": "Dashboard verified and live"
-    }
+@router.get("/status")
+async def dashboard_status():
+    return {"dashboard": "✅ active", "version": "v2.6.0"}
