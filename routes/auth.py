@@ -1,20 +1,20 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import hashlib
 import logging
-import os
 
 # ───────────────────────────────────────────────
-# 🧩 Router Config
+# 🧠 Auth Router Setup
+# (Main.py will auto-prefix this file as /auth)
 # ───────────────────────────────────────────────
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(tags=["Auth"])
 logger = logging.getLogger("auth")
 
-# Simple in-memory store (replace with DB later)
+# Temporary in-memory user store (for demo/testing)
 fake_users = {}
 
 # ───────────────────────────────────────────────
-# 🧱 Data Models
+# 🧩 Data Model
 # ───────────────────────────────────────────────
 class User(BaseModel):
     email: EmailStr
@@ -22,63 +22,50 @@ class User(BaseModel):
 
 
 # ───────────────────────────────────────────────
-# 🧠 Utility — Hash password safely
+# 🪪 Signup Endpoint
 # ───────────────────────────────────────────────
-def hash_password(password: str) -> str:
-    salt = os.getenv("AUTH_SALT", "brainwashlabs")  # add simple salt
-    return hashlib.sha256((password + salt).encode()).hexdigest()
-
-
-# ───────────────────────────────────────────────
-# 🚀 Signup Route
-# ───────────────────────────────────────────────
-@router.post("/signup", status_code=status.HTTP_201_CREATED)
+@router.post("/signup")
 async def signup(user: User):
-    """Register a new user (simple demo version)"""
+    """Register a new user (in-memory demo)"""
     if user.email in fake_users:
         logger.warning(f"❌ Signup failed: {user.email} already exists.")
         raise HTTPException(status_code=400, detail="User already exists.")
 
-    fake_users[user.email] = hash_password(user.password)
+    hashed_pw = hashlib.sha256(user.password.encode()).hexdigest()
+    fake_users[user.email] = hashed_pw
     logger.info(f"✅ New user created: {user.email}")
-    return {
-        "ok": True,
-        "msg": "✅ User created successfully.",
-        "email": user.email
-    }
+    return {"ok": True, "msg": "✅ User created successfully."}
 
 
 # ───────────────────────────────────────────────
-# 🔑 Login Route
+# 🔐 Login Endpoint
 # ───────────────────────────────────────────────
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post("/login")
 async def login(user: User):
-    """Authenticate existing user"""
+    """Authenticate an existing user"""
+    hashed_pw = hashlib.sha256(user.password.encode()).hexdigest()
     stored_pw = fake_users.get(user.email)
+
     if not stored_pw:
         logger.warning(f"❌ Login failed: {user.email} not found.")
         raise HTTPException(status_code=404, detail="User not found.")
-
-    if stored_pw != hash_password(user.password):
+    if stored_pw != hashed_pw:
         logger.warning(f"❌ Login failed: invalid password for {user.email}.")
         raise HTTPException(status_code=401, detail="Invalid credentials.")
 
     logger.info(f"✅ Login successful for {user.email}")
-    return {
-        "ok": True,
-        "msg": "✅ Login successful.",
-        "email": user.email
-    }
+    return {"ok": True, "msg": "✅ Login successful."}
 
 
 # ───────────────────────────────────────────────
-# 🧹 Health / Debug Route
+# 📊 Status Endpoint (Router Verification)
 # ───────────────────────────────────────────────
 @router.get("/status")
 async def auth_status():
-    """Quick check if auth router is alive"""
+    """Verify auth router health"""
+    logger.info("📡 /auth/status check triggered")
     return {
         "ok": True,
         "users_registered": len(fake_users),
-        "env": os.getenv("ENV", "production")
+        "env": "production",
     }
