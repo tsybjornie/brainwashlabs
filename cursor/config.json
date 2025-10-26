@@ -1,0 +1,20 @@
+{
+  "project": "Brainwash Labs Backend",
+  "description": "FastAPI backend for Brainwash Labs — connected to Render and Stripe/Coinbase APIs.",
+  "integrations": {
+    "render": {
+      "api_url": "https://api.render.com/v1",
+      "auth_header": "Authorization: Bearer rnd_4SbfaRznh11lSSEjZpdDIfSC5lmK"
+    }
+  },
+  "commands": {
+    "deploy": "git add . && git commit -m 'Auto deploy from Cursor' && git push origin main",
+    "run_local": "uvicorn main:app --reload"
+  },
+  "style": {
+    "python": {
+      "formatter": "black",
+      "linting": true
+    }
+  }
+}
