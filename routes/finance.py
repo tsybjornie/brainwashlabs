@@ -1,3 +1,8 @@
+# ───────────────────────────────────────────────
+# 💰 Finance Router — Brainwash Labs
+# Stripe + Coinbase checkout integrations (Render-safe)
+# ───────────────────────────────────────────────
+
 from fastapi import APIRouter, Request, HTTPException
 import stripe
 import requests
@@ -20,6 +25,9 @@ COINBASE_API_URL = "https://api.commerce.coinbase.com/charges"
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
+# ───────────────────────────────────────────────
+# 📁 Local data helpers
+# ───────────────────────────────────────────────
 DATA_PATH = Path("data/users.json")
 
 def load_users():
@@ -37,6 +45,7 @@ def save_users(data):
 # ───────────────────────────────────────────────
 @router.post("/stripe/checkout")
 async def create_stripe_checkout(request: Request):
+    """Create a Stripe Checkout session for the given plan."""
     if not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=400, detail="Stripe key not configured in environment")
 
@@ -73,6 +82,7 @@ async def create_stripe_checkout(request: Request):
 # ───────────────────────────────────────────────
 @router.post("/coinbase/checkout")
 async def create_coinbase_checkout(request: Request):
+    """Create a Coinbase Commerce checkout link."""
     if not COINBASE_API_KEY:
         raise HTTPException(status_code=400, detail="Coinbase key not configured in environment")
 
@@ -112,19 +122,11 @@ async def create_coinbase_checkout(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ───────────────────────────────────────────────
-# 🧩 Health check
-# ───────────────────────────────────────────────
-@router.get("/status")
-async def finance_status():
-    return {
-        "stripe_connected": bool(STRIPE_SECRET_KEY),
-        "coinbase_connected": bool(COINBASE_API_KEY)
-    }
-# ───────────────────────────────────────────────
 # 🔍 Finance Connection Status
 # ───────────────────────────────────────────────
 @router.get("/status")
 async def finance_status():
+    """Health check for finance integrations."""
     return {
         "stripe_connected": bool(STRIPE_SECRET_KEY),
         "coinbase_connected": bool(COINBASE_API_KEY),
