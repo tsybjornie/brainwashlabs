@@ -29,7 +29,7 @@ logger = logging.getLogger("brainwashlabs")
 app = FastAPI(
     title="🧠 Brainwash Labs Backend",
     description="Autonomous SaaS Factory Backend — Render Live Environment",
-    version="2.4.5"
+    version="2.4.6"
 )
 
 # ───────────────────────────────────────────────
@@ -62,7 +62,7 @@ async def root():
     return {
         "status": "✅ Brainwash Labs Backend is running!",
         "env": os.getenv("ENV", "production"),
-        "version": "2.4.5",
+        "version": "2.4.6",
     }
 
 @app.get("/healthz")
@@ -99,50 +99,45 @@ async def verify_service_health():
                 logger.warning(f"⚠️ {name} connectivity check failed: {e}")
 
 # ───────────────────────────────────────────────
-# 🧩 Router Registration (Force-Load & Diagnose)
-# ───────────────────────────────────────────────
-try:
-    import routes
-    from routes import auth, avatar, analytics, dashboard, finance, integrations, webhooks
-
-    routers = {
-        "/auth": auth,
-        "/avatar": avatar,
-        "/analytics": analytics,
-        "/dashboard": dashboard,
-        "/finance": finance,
-        "/integrations": integrations,
-        "/webhooks": webhooks,
-    }
-
-    for prefix, module in routers.items():
-        if hasattr(module, "router"):
-            app.include_router(module.router, prefix=prefix)
-            logger.info(f"✅ Registered router: {prefix}")
-        else:
-            logger.warning(f"⚠️ Skipped {prefix}: no `router` found")
-
-    logger.info("🚀 All routers registered successfully (v2.4.5)")
-
-except Exception as e:
-    logger.error(f"❌ Router registration failed: {e}")
-    traceback.print_exc()
-
-# ───────────────────────────────────────────────
 # 🧩 Debug Endpoint — Route Map
 # ───────────────────────────────────────────────
 @app.get("/debug/routes")
 async def debug_routes():
     return {
         "routes": [r.path for r in app.routes if hasattr(r, "path")],
-        "version": "2.4.5",
+        "version": "2.4.6",
     }
 
 # ───────────────────────────────────────────────
-# 🚀 Startup Hook
+# 🚀 Startup Hook (Dynamic Router Import)
 # ───────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.5)")
+    logger.info("🚀 Booting Brainwash Labs Backend (v2.4.6)")
     asyncio.create_task(verify_service_health())
+
+    try:
+        import routes
+        from routes import auth, avatar, analytics, dashboard, finance, integrations, webhooks
+
+        routers = [
+            (auth.router, "/auth"),
+            (avatar.router, "/avatar"),
+            (analytics.router, "/analytics"),
+            (dashboard.router, "/dashboard"),
+            (finance.router, "/finance"),
+            (integrations.router, "/integrations"),
+            (webhooks.router, "/webhooks"),
+        ]
+
+        for router, prefix in routers:
+            app.include_router(router, prefix=prefix)
+            logger.info(f"✅ Router registered dynamically: {prefix}")
+
+        logger.info("✅ All routers loaded dynamically at startup (Render-safe).")
+
+    except Exception as e:
+        logger.error(f"❌ Router import during startup failed: {e}")
+        traceback.print_exc()
+
     logger.info("🧩 Backend initialized and ready for requests.")
